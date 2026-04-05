@@ -42,7 +42,7 @@ export default function ChatInterface() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSandboxActive, setIsSandboxActive] = useState(true);
+  const [isSandboxActive] = useState(true);
   const [targetDomain, setTargetDomain] = useState('rh420.xyz');
   const [targetHistory, setTargetHistory] = useState<string[]>(['rh420.xyz']);
   const [isTargetLocked, setIsTargetLocked] = useState(false);
@@ -526,17 +526,6 @@ export default function ChatInterface() {
           >
             Clear
           </button>
-          <button 
-            onClick={() => setIsSandboxActive(!isSandboxActive)}
-            className={cn(
-              "flex-shrink-0 text-[9px] sm:text-[10px] px-2 py-1 rounded border transition-all uppercase tracking-widest",
-              isSandboxActive 
-                ? "border-[#00ff41]/30 text-[#00ff41]/60 hover:bg-[#00ff41]/10" 
-                : "border-red-500/30 text-red-500/60 hover:bg-red-500/10"
-            )}
-          >
-            {isSandboxActive ? "Sandbox" : "No Sandbox"}
-          </button>
         </div>
       </header>
 
@@ -670,6 +659,12 @@ export default function ChatInterface() {
                       <div className="markdown-body prose prose-invert prose-green max-w-none text-xs sm:text-sm">
                         <Markdown
                           components={{
+                            p({ children }) {
+                              return <div className="mb-4">{children}</div>;
+                            },
+                            pre({ children }) {
+                              return <>{children}</>;
+                            },
                             code({ node, inline, className, children, ...props }: any) {
                               if (!inline) {
                                 return (

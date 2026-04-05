@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -68,6 +68,13 @@ CURRENT_TARGET_CONTEXT:
       topP: 0.95,
       thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
       tools: [{ googleSearch: {} }, { urlContext: {} }, { codeExecution: {} } as any],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     },
   });
 
