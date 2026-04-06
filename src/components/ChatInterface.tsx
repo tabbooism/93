@@ -5,33 +5,12 @@ import Markdown from 'react-markdown';
 import { streamNightfuryResponse, Message, CodeExecutionStep, ai } from '../lib/gemini';
 import { cn } from '../lib/utils';
 
-const CodeBlock = ({ className, children, runInSandbox, ...props }: any) => {
-  const match = /language-(\w+)/.exec(className || '');
-  const detectedLang = match ? match[1] : '';
-  const [selectedLang, setSelectedLang] = useState(detectedLang || 'js');
+const CodeBlock = ({ className, children, ...props }: any) => {
   const code = String(children).replace(/\n$/, '');
   
   return (
     <div className="relative group my-3 sm:my-4">
-      <div className="absolute top-2 right-2 flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10 bg-black/80 p-1 rounded border border-[#00ff41]/20 backdrop-blur-sm">
-        <select 
-          value={selectedLang}
-          onChange={(e) => setSelectedLang(e.target.value)}
-          className="text-[8px] sm:text-[10px] bg-transparent border-none text-[#00ff41]/60 focus:ring-0 outline-none cursor-pointer uppercase"
-        >
-          <option value="js" className="bg-[#0a0a0a]">JS</option>
-          <option value="python" className="bg-[#0a0a0a]">PY</option>
-          <option value="bash" className="bg-[#0a0a0a]">SH</option>
-        </select>
-        <button 
-          onClick={() => runInSandbox(code, selectedLang)}
-          title={`Run in ${selectedLang.toUpperCase()} Sandbox`}
-          className="p-1 sm:p-1.5 bg-[#00ff41]/10 border border-[#00ff41]/30 rounded text-[#00ff41] hover:bg-[#00ff41]/20 transition-colors"
-        >
-          <Play className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-        </button>
-      </div>
-      <pre className={cn(className, "text-[10px] sm:text-xs pt-8 sm:pt-10")} {...props}>
+      <pre className={cn(className, "text-[10px] sm:text-xs pt-4 sm:pt-6")} {...props}>
         <code>{children}</code>
       </pre>
     </div>
@@ -44,9 +23,9 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSandboxActive] = useState(true);
   const [targetDomain, setTargetDomain] = useState('rh420.xyz');
+  const [originIp, setOriginIp] = useState('');
   const [targetHistory, setTargetHistory] = useState<string[]>(['rh420.xyz']);
   const [isTargetLocked, setIsTargetLocked] = useState(false);
-  const [sandboxOutput, setSandboxOutput] = useState<{ code: string; output: string; type: 'js' | 'python' | 'error' } | null>(null);
   const [threatIntel, setThreatIntel] = useState<{ id: string; title: string; severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; description: string; timestamp: string }[]>([]);
   const [isIntelLoading, setIsIntelLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -224,6 +203,37 @@ export default function ChatInterface() {
     }
   };
 
+  const triggerExploitGen = async () => {
+    if (isLoading) return;
+    
+    const exploitPrompt = `EXPLOIT_GENERATION_REQUEST: Based on the current reconnaissance data for ${targetDomain}, generate an automated exploit script.
+    1. Analyze the identified technology stack and any potential vulnerabilities.
+    2. Generate a fully functional, directly executable Python or Bash script.
+    3. The script should be designed to test for exploitability (e.g., using Metasploit modules, custom socket payloads, or specific CVE-based triggers).
+    4. Include clear execution instructions and any necessary prerequisites.
+    5. Prioritize high-fidelity, non-destructive proof-of-concept validation.`;
+
+    const userMessage: Message = { role: 'user', text: `[SYSTEM_COMMAND] GENERATE_EXPLOIT_SCRIPT --target ${targetDomain}` };
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+
+    const modelMessage: Message = { 
+      role: 'model', 
+      text: '', 
+      isThinking: true,
+      codeExecutionSteps: [] 
+    };
+    setMessages(prev => [...prev, modelMessage]);
+
+    try {
+      await processStream(exploitPrompt, targetDomain);
+    } catch (error) {
+      console.error('Error during exploit generation:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const triggerDeepToolScan = async () => {
     if (isLoading) return;
     
@@ -290,7 +300,7 @@ export default function ChatInterface() {
     let groundingMetadata = null;
     let currentSteps: CodeExecutionStep[] = [];
     
-    const stream = streamNightfuryResponse(prompt, domain);
+    const stream = streamNightfuryResponse(prompt, domain, originIp);
     
     for await (const chunk of stream) {
       const parts = chunk.candidates?.[0]?.content?.parts;
@@ -457,11 +467,8 @@ export default function ChatInterface() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[8px] sm:text-[10px] text-[#00ff41]/60">
               <span className="flex items-center gap-1"><Terminal className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> READY</span>
               <span className="flex items-center gap-1"><Globe className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> ACTIVE</span>
-              <span className={cn(
-                "flex items-center gap-1 transition-colors",
-                isSandboxActive ? "text-[#00ff41]" : "text-red-500"
-              )}>
-                <Box className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> SANDBOX_{isSandboxActive ? "ON" : "OFF"}
+              <span className="flex items-center gap-1 text-[#00ff41]">
+                <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> DIRECT_EXECUTION_ENABLED
               </span>
               <div className="flex items-center gap-1 text-[#00ff41]/80 border-l border-[#1a1a1a] pl-2 ml-1 sm:ml-2">
                 <Search className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
@@ -482,6 +489,16 @@ export default function ChatInterface() {
                   <Maximize2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 rotate-45" />
                 </button>
               </div>
+              <div className="flex items-center gap-1 text-[#00ff41]/60 border-l border-[#1a1a1a] pl-2 ml-1 sm:ml-2">
+                <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                <input 
+                  type="text"
+                  value={originIp}
+                  onChange={(e) => setOriginIp(e.target.value)}
+                  placeholder="ORIGIN_IP (WAF BYPASS)"
+                  className="bg-transparent border-none focus:ring-0 text-[8px] sm:text-[10px] text-[#00ff41]/80 placeholder:text-[#00ff41]/20 outline-none w-24 sm:w-32"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -498,6 +515,13 @@ export default function ChatInterface() {
           >
             {isIntelLoading ? <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" /> : <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
             <span className="hidden xs:inline">Threat Intel</span><span className="xs:hidden">Intel</span>
+          </button>
+          <button 
+            onClick={triggerExploitGen}
+            disabled={isLoading}
+            className="flex-shrink-0 flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 sm:px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-500 rounded hover:bg-purple-500/20 transition-all uppercase tracking-widest disabled:opacity-30"
+          >
+            <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> <span className="hidden xs:inline">Exploit Gen</span><span className="xs:hidden">Exploit</span>
           </button>
           <button 
             onClick={triggerDeepToolScan}
@@ -534,10 +558,7 @@ export default function ChatInterface() {
         {/* Chat Area */}
         <main 
           ref={scrollRef}
-          className={cn(
-            "flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-6 scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent transition-all duration-500",
-            sandboxOutput ? "sm:mr-[400px]" : "mr-0"
-          )}
+          className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-6 scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent transition-all duration-500"
         >
           {/* Threat Intel Panel */}
           {threatIntel.length > 0 && (
@@ -670,7 +691,6 @@ export default function ChatInterface() {
                                 return (
                                   <CodeBlock 
                                     className={className} 
-                                    runInSandbox={runInSandbox} 
                                     {...props}
                                   >
                                     {children}
@@ -707,52 +727,6 @@ export default function ChatInterface() {
             ))}
           </AnimatePresence>
         </main>
-
-        {/* Sandbox Output Panel */}
-        <AnimatePresence>
-          {sandboxOutput && (
-            <motion.aside
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              className="fixed right-0 top-[100px] sm:top-[73px] bottom-[100px] w-full sm:w-[400px] bg-[#0a0a0a] border-l border-[#1a1a1a] flex flex-col z-50 shadow-[-20px_0_50px_rgba(0,0,0,0.5)]"
-            >
-              <div className="p-3 sm:p-4 border-b border-[#1a1a1a] flex items-center justify-between bg-black/50">
-                <div className="flex items-center gap-2">
-                  <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#00ff41]" />
-                  <h2 className="text-[10px] sm:text-xs font-bold uppercase tracking-widest">Sandbox Output</h2>
-                </div>
-                <button 
-                  onClick={() => setSandboxOutput(null)}
-                  className="p-1.5 hover:bg-[#1a1a1a] rounded transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4 font-mono text-[10px] sm:text-xs">
-                <div className="space-y-1">
-                  <div className="text-[9px] sm:text-[10px] text-[#00ff41]/40 uppercase">Source Code</div>
-                  <pre className="p-2 sm:p-3 bg-black border border-[#1a1a1a] rounded text-[#00ff41]/60 overflow-x-auto text-[10px] sm:text-xs">
-                    <code>{sandboxOutput.code}</code>
-                  </pre>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-[9px] sm:text-[10px] text-[#00ff41]/40 uppercase">Execution Log</div>
-                  <div className={cn(
-                    "p-2 sm:p-3 rounded border whitespace-pre-wrap min-h-[100px] text-[10px] sm:text-xs",
-                    sandboxOutput.type === 'error' ? "bg-red-500/5 border-red-500/20 text-red-400" : "bg-[#00ff41]/5 border-[#00ff41]/20 text-[#00ff41]"
-                  )}>
-                    {sandboxOutput.output}
-                  </div>
-                </div>
-              </div>
-              <div className="p-3 sm:p-4 border-t border-[#1a1a1a] bg-black/30 text-[9px] sm:text-[10px] text-[#00ff41]/40 flex items-center justify-between">
-                <span>RUNTIME: {sandboxOutput.type.toUpperCase()}</span>
-                <span className="flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> INTEGRITY_VERIFIED</span>
-              </div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Input Area */}
@@ -778,11 +752,6 @@ export default function ChatInterface() {
           <p className="text-[7px] sm:text-[8px] text-[#00ff41]/20 uppercase tracking-[0.1em] sm:tracking-[0.2em]">
             Authorized Personnel Only // Encrypted Session
           </p>
-          {isSandboxActive && (
-            <div className="flex items-center gap-1 text-[7px] sm:text-[8px] text-[#00ff41]/40 uppercase">
-              <CheckCircle2 className="w-2 h-2" /> Sandbox Verified
-            </div>
-          )}
         </div>
       </footer>
     </div>
