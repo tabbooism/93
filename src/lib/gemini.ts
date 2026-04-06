@@ -79,7 +79,7 @@ ${originIp ? `- ORIGIN_IP: ${originIp} (Use this to bypass WAF/Cloudflare and pe
 `;
 
   const response = await ai.models.generateContentStream({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
       systemInstruction: dynamicInstruction,
